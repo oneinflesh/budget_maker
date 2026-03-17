@@ -20,6 +20,9 @@ class BudgetEntryPage(QWidget):
         
         self.income_inputs = {}
         self.expense_inputs = {}
+        self.income_labels = {}  # Store labels for highlighting
+        self.expense_labels = {}  # Store labels for highlighting
+        self.current_focused_item = None  # Track currently focused item
         
         self.init_ui()
         self.load_items()
@@ -168,6 +171,8 @@ class BudgetEntryPage(QWidget):
         # Clear existing inputs
         self.income_inputs.clear()
         self.expense_inputs.clear()
+        self.income_labels = {}  # Store labels for highlighting
+        self.expense_labels = {}  # Store labels for highlighting
         
         # Get Income category items
         categories = self.service.get_all_categories()
@@ -192,6 +197,7 @@ class BudgetEntryPage(QWidget):
                 label = QLabel(item_name)
                 label.setStyleSheet("color: #4CAF50; padding: 3px;")
                 self.income_grid.addWidget(label, row, 0)
+                self.income_labels[item_id] = label
                 
                 input_field = QLineEdit()
                 input_field.setPlaceholderText('0.00')
@@ -203,6 +209,11 @@ class BudgetEntryPage(QWidget):
                     # Format the amount properly
                     input_field.setText(f'{amount:.2f}' if amount else '')
                 
+                # Connect focus events for highlighting
+                input_field.focusInEvent = lambda event, iid=item_id, field=input_field: self.on_focus_in(event, iid, 'income', field)
+                input_field.focusOutEvent = lambda event, iid=item_id, field=input_field: self.on_focus_out(event, iid, 'income', field)
+                
+                # Connect text change for totals calculation
                 input_field.textChanged.connect(self.calculate_totals)
                 self.income_grid.addWidget(input_field, row, 1)
                 
@@ -215,6 +226,7 @@ class BudgetEntryPage(QWidget):
                 label = QLabel(item_name)
                 label.setStyleSheet("color: #f44336; padding: 3px;")
                 self.expense_grid.addWidget(label, row, 0)
+                self.expense_labels[item_id] = label
                 
                 input_field = QLineEdit()
                 input_field.setPlaceholderText('0.00')
@@ -226,6 +238,11 @@ class BudgetEntryPage(QWidget):
                     # Format the amount properly
                     input_field.setText(f'{amount:.2f}' if amount else '')
                 
+                # Connect focus events for highlighting
+                input_field.focusInEvent = lambda event, iid=item_id, field=input_field: self.on_focus_in(event, iid, 'expense', field)
+                input_field.focusOutEvent = lambda event, iid=item_id, field=input_field: self.on_focus_out(event, iid, 'expense', field)
+                
+                # Connect text change for totals calculation
                 input_field.textChanged.connect(self.calculate_totals)
                 self.expense_grid.addWidget(input_field, row, 1)
                 
@@ -233,6 +250,56 @@ class BudgetEntryPage(QWidget):
         
         # Calculate totals after loading
         self.calculate_totals()
+    
+    def on_focus_in(self, event, item_id, item_type, field):
+        """Handle focus in - highlight the item"""
+        # Call original focus in event
+        QLineEdit.focusInEvent(field, event)
+        
+        # Clear previous highlight
+        if self.current_focused_item:
+            old_id, old_type = self.current_focused_item
+            self.highlight_item(old_id, old_type, False)
+        
+        # Highlight current item
+        self.current_focused_item = (item_id, item_type)
+        self.highlight_item(item_id, item_type, True)
+    
+    def on_focus_out(self, event, item_id, item_type, field):
+        """Handle focus out - remove highlight"""
+        # Call original focus out event
+        QLineEdit.focusOutEvent(field, event)
+        
+        # Remove highlight
+        if self.current_focused_item == (item_id, item_type):
+            self.highlight_item(item_id, item_type, False)
+            self.current_focused_item = None
+    
+    def highlight_item(self, item_id, item_type, highlight):
+        """Highlight or unhighlight an item label"""
+        if item_type == 'income':
+            label = self.income_labels.get(item_id)
+            base_color = '#4CAF50'
+        else:
+            label = self.expense_labels.get(item_id)
+            base_color = '#f44336'
+        
+        if not label:
+            return
+        
+        if highlight:
+            # Bold with border box
+            label.setStyleSheet(f'''
+                color: {base_color};
+                font-weight: bold;
+                padding: 5px;
+                border: 2px solid {base_color};
+                border-radius: 3px;
+                background-color: rgba(76, 175, 80, 0.1) if {item_type == 'income'} else rgba(244, 67, 54, 0.1);
+            ''')
+        else:
+            # Normal style
+            label.setStyleSheet(f'color: {base_color}; padding: 3px;')
     
     def calculate_totals(self):
         """Calculate and update totals"""

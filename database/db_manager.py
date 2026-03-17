@@ -167,7 +167,6 @@ class DatabaseManager:
                     'TDTA Packiam Ammal Siruvar Illam Off/ Coll', 'Vision',
                     'Child Care & Edn Development Centre', 'Anbin illam -Off/ Coll',
                     'Blind School Off/ Coll', 'Children Mission Off/ Coll',
-                    'Blind School Off/Coll', 'Children Mission Off/Coll',
                     'Communication Off/ Coll', 'Counselling Off/Coll',
                     'Deaf Ministry Off/Coll', 'Diocesan School Welfare Fund',
                     'Deaf School Off/Coll', 'DME Off/Coll', 'IMS Off/Coll',
