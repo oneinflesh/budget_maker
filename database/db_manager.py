@@ -156,7 +156,7 @@ class DatabaseManager:
                     'Opening Balance',  # First item at top
                     'Baptism Offertory', 'Church Offertory', 'Harvest Festival Offertory',
                     'Holy Communion Offertory', 'House Visit Offertory', 'Marriage Offertory',
-                    'Miscellaneous Offertory', 'Miscellaneous Income', 'Sangam - CW/ DW',
+                    'Miscellaneous Collection', 'Miscellaneous Income', 'Miscellaneous Offertory', 'Sangam - CW/ DW',
                     'Sangam - Sabai', 'Thanks Offertory',
                     'Tithe Offertory', 'Trumphat Festival', 'Interest Income - Diocesan office',
                     'Interest - FDR - Endowment', 'Intrest - saving Bank', 'Rock Hall ( From Diocese)',
