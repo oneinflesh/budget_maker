@@ -52,14 +52,16 @@ class ItemTab(QWidget):
         
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(['ID', 'Item Name', 'Category'])
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(['ID', 'Order', 'Item Name', 'Category'])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.table.itemChanged.connect(self.on_item_changed)
         self.table.setColumnWidth(0, 50)
-        self.table.setColumnWidth(1, 250)
+        self.table.setColumnWidth(1, 60)
         self.table.setColumnWidth(2, 250)
+        self.table.setColumnWidth(3, 150)
         
         # Allow clicking on empty space to deselect
         self.table.viewport().installEventFilter(self)
@@ -71,19 +73,11 @@ class ItemTab(QWidget):
         delete_btn.clicked.connect(self.delete_item)
         layout.addWidget(delete_btn)
         
-        # Reorder buttons
-        reorder_layout = QHBoxLayout()
-        reorder_layout.addStretch()
-        
-        move_up_btn = QPushButton('Move Up ↑')
-        move_up_btn.clicked.connect(self.move_item_up)
-        reorder_layout.addWidget(move_up_btn)
-        
-        move_down_btn = QPushButton('Move Down ↓')
-        move_down_btn.clicked.connect(self.move_item_down)
-        reorder_layout.addWidget(move_down_btn)
-        
-        layout.addLayout(reorder_layout)
+        # Info label
+        info_label = QLabel('Tip: Double-click the Order column to change item position. Items are numbered separately for each category.')
+        info_label.setStyleSheet('color: #666; font-style: italic; padding: 5px;')
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
         
         self.setLayout(layout)
     
@@ -94,6 +88,9 @@ class ItemTab(QWidget):
             self.category_combo.addItem(cat_name, cat_id)
     
     def load_data(self):
+        # Disconnect itemChanged signal temporarily to avoid triggering during load
+        self.table.itemChanged.disconnect(self.on_item_changed)
+        
         self.table.setRowCount(0)
         data = self.service.get_all_items()
         
@@ -103,13 +100,26 @@ class ItemTab(QWidget):
             # ID column with category_id stored in UserRole
             id_item = QTableWidgetItem(str(item_id))
             id_item.setData(Qt.UserRole, category_id)
+            id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)  # Not editable
             self.table.setItem(row_idx, 0, id_item)
             
-            # Item name column
-            self.table.setItem(row_idx, 1, QTableWidgetItem(item_name))
+            # Order column - editable
+            order_item = QTableWidgetItem(str(row_idx + 1))  # Display relative order
+            order_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row_idx, 1, order_item)
             
-            # Category name column
-            self.table.setItem(row_idx, 2, QTableWidgetItem(category_name))
+            # Item name column - not editable in table
+            name_item = QTableWidgetItem(item_name)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(row_idx, 2, name_item)
+            
+            # Category name column - not editable
+            cat_item = QTableWidgetItem(category_name)
+            cat_item.setFlags(cat_item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(row_idx, 3, cat_item)
+        
+        # Reconnect itemChanged signal
+        self.table.itemChanged.connect(self.on_item_changed)
     
     def refresh_data(self):
         self.load_categories()
@@ -162,7 +172,7 @@ class ItemTab(QWidget):
         
         row = self.table.currentRow()
         item_id = int(self.table.item(row, 0).text())
-        name = self.table.item(row, 1).text()
+        name = self.table.item(row, 2).text()
         
         reply = QMessageBox.question(self, 'Confirm Delete', 
                                      f'Are you sure you want to delete "{name}"?',
@@ -184,7 +194,7 @@ class ItemTab(QWidget):
         if selected_rows:
             row = self.table.currentRow()
             self.selected_id = int(self.table.item(row, 0).text())
-            self.name_input.setText(self.table.item(row, 1).text())
+            self.name_input.setText(self.table.item(row, 2).text())
             
             # Set category combo
             category_id = self.table.item(row, 0).data(Qt.UserRole)
@@ -206,53 +216,38 @@ class ItemTab(QWidget):
         self.add_btn.setEnabled(True)
         self.update_btn.setEnabled(False)
     
-    def move_item_up(self):
-        """Move selected item up in display order"""
-        selected_rows = self.table.selectedItems()
-        if not selected_rows:
-            QMessageBox.warning(self, 'Error', 'Please select an item to move')
+    def on_item_changed(self, item):
+        """Handle when order number is changed"""
+        if item.column() != 1:  # Only handle Order column
             return
-        
-        row = self.table.currentRow()
-        if row == 0:
-            QMessageBox.information(self, 'Info', 'Item is already at the top')
-            return
-        
-        # Get current and previous item IDs
-        current_item_id = int(self.table.item(row, 0).text())
-        previous_item_id = int(self.table.item(row - 1, 0).text())
         
         try:
-            self.service.swap_item_order(current_item_id, previous_item_id)
+            new_order = int(item.text())
+            if new_order < 1:
+                raise ValueError("Order must be positive")
+            
+            row = item.row()
+            item_id = int(self.table.item(row, 0).text())
+            category_id = self.table.item(row, 0).data(Qt.UserRole)
+            
+            # Get all items in the same category
+            all_items = self.service.get_all_items()
+            category_items = [(iid, iname, cid, cname) for iid, iname, cid, cname in all_items if cid == category_id]
+            
+            # Validate new order is within range
+            if new_order > len(category_items):
+                new_order = len(category_items)
+                item.setText(str(new_order))
+            
+            # Reorder items in this category
+            self.service.reorder_item(item_id, category_id, new_order)
+            
+            # Reload to show new order
             self.load_data()
-            # Reselect the moved item
-            self.table.selectRow(row - 1)
-        except Exception as e:
-            QMessageBox.warning(self, 'Error', f'Failed to move: {str(e)}')
-    
-    def move_item_down(self):
-        """Move selected item down in display order"""
-        selected_rows = self.table.selectedItems()
-        if not selected_rows:
-            QMessageBox.warning(self, 'Error', 'Please select an item to move')
-            return
-        
-        row = self.table.currentRow()
-        if row == self.table.rowCount() - 1:
-            QMessageBox.information(self, 'Info', 'Item is already at the bottom')
-            return
-        
-        # Get current and next item IDs
-        current_item_id = int(self.table.item(row, 0).text())
-        next_item_id = int(self.table.item(row + 1, 0).text())
-        
-        try:
-            self.service.swap_item_order(current_item_id, next_item_id)
-            self.load_data()
-            # Reselect the moved item
-            self.table.selectRow(row + 1)
-        except Exception as e:
-            QMessageBox.warning(self, 'Error', f'Failed to move: {str(e)}')
+            
+        except ValueError:
+            QMessageBox.warning(self, 'Error', 'Please enter a valid number for order')
+            self.load_data()  # Reload to reset invalid value
     
     def eventFilter(self, obj, event):
         """Handle clicks on empty table area to deselect"""

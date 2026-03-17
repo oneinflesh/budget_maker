@@ -194,6 +194,49 @@ class CategoryService:
             cursor.execute('UPDATE items SET display_order = ? WHERE id = ?', (order2, item1_id))
             cursor.execute('UPDATE items SET display_order = ? WHERE id = ?', (order1, item2_id))
     
+    def reorder_item(self, item_id, category_id, new_position):
+        """Reorder an item to a new position within its category"""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get all items in this category ordered by display_order
+            cursor.execute('''
+                SELECT id, display_order 
+                FROM items 
+                WHERE category_id = ? 
+                ORDER BY display_order, item_name
+            ''', (category_id,))
+            
+            items = cursor.fetchall()
+            
+            # Find current position (1-indexed)
+            current_pos = None
+            for idx, (iid, _) in enumerate(items, start=1):
+                if iid == item_id:
+                    current_pos = idx
+                    break
+            
+            if current_pos is None:
+                return
+            
+            # If position hasn't changed, do nothing
+            if current_pos == new_position:
+                return
+            
+            # Reorder: assign new display_order values
+            new_order = []
+            items_list = [iid for iid, _ in items]
+            
+            # Remove item from current position
+            moved_item = items_list.pop(current_pos - 1)
+            
+            # Insert at new position
+            items_list.insert(new_position - 1, moved_item)
+            
+            # Update display_order for all items in category
+            for idx, iid in enumerate(items_list, start=1):
+                cursor.execute('UPDATE items SET display_order = ? WHERE id = ?', (idx, iid))
+    
     def save_budget_entry(self, year_id, pastorate_id, data_type_id, category_id, item_id, amount):
         """Save a single budget entry"""
         with self.db.get_connection() as conn:
