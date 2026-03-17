@@ -94,8 +94,17 @@ class ItemTab(QWidget):
         self.table.setRowCount(0)
         data = self.service.get_all_items()
         
+        # Group items by category to get category-specific order numbers
+        category_counters = {}
+        
         for row_idx, (item_id, item_name, category_id, category_name) in enumerate(data):
             self.table.insertRow(row_idx)
+            
+            # Track order within each category
+            if category_id not in category_counters:
+                category_counters[category_id] = 0
+            category_counters[category_id] += 1
+            category_order = category_counters[category_id]
             
             # ID column with category_id stored in UserRole
             id_item = QTableWidgetItem(str(item_id))
@@ -103,8 +112,8 @@ class ItemTab(QWidget):
             id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)  # Not editable
             self.table.setItem(row_idx, 0, id_item)
             
-            # Order column - editable
-            order_item = QTableWidgetItem(str(row_idx + 1))  # Display relative order
+            # Order column - editable, shows category-specific order
+            order_item = QTableWidgetItem(str(category_order))
             order_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row_idx, 1, order_item)
             
