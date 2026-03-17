@@ -34,9 +34,10 @@ class RestoreTab(QWidget):
             'Import budget entries from CSV file.\n\n'
             'CSV Format: Pastorate_name, Year, Data_type, Category_name, Item_name, Amount\n\n'
             'Notes:\n'
-            '• New pastorates and years will be created automatically\n'
-            '• Categories, Data types, and Items must match existing defaults\n'
-            '• Existing entries will be updated with new amounts'
+            '• New pastorates, years, and custom items will be created automatically\n'
+            '• Categories and Data types must match existing defaults\n'
+            '• Existing entries will be updated with new amounts\n'
+            '• Custom items will be added to the end of the item list'
         )
         desc.setWordWrap(True)
         desc.setStyleSheet('color: #666; padding: 10px; background-color: #f9f9f9; border-left: 3px solid #4CAF50;')
@@ -188,7 +189,7 @@ class RestoreTab(QWidget):
             QMessageBox.critical(self, 'Error', f'Import failed: {str(e)}')
     
     def validate_row(self, data_type, category_name, item_name):
-        """Validate that data_type, category, and item exist"""
+        """Validate that data_type and category exist. Item will be created if missing."""
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -203,14 +204,7 @@ class RestoreTab(QWidget):
             if not category_result:
                 return f'Category "{category_name}" not found in system'
             
-            category_id = category_result[0]
-            
-            # Check item exists in that category
-            cursor.execute('SELECT id FROM items WHERE item_name = ? AND category_id = ?', 
-                         (item_name, category_id))
-            if not cursor.fetchone():
-                return f'Item "{item_name}" not found in category "{category_name}"'
-            
+            # Item will be created during import if it doesn't exist, so no validation needed
             return None
     
     def import_data(self, rows):
@@ -218,6 +212,7 @@ class RestoreTab(QWidget):
         imported_count = 0
         new_pastorates = False
         new_years = False
+        new_items_created = []
         
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -246,16 +241,41 @@ class RestoreTab(QWidget):
                         self.log_text.append(f'  Created new year: {row["year"]}')
                         new_years = True
                     
-                    # Get IDs for data_type, category, item
+                    # Get IDs for data_type and category
                     cursor.execute('SELECT id FROM data_types WHERE type_name = ?', (row['data_type'],))
                     data_type_id = cursor.fetchone()[0]
                     
                     cursor.execute('SELECT id FROM categories WHERE category_name = ?', (row['category_name'],))
                     category_id = cursor.fetchone()[0]
                     
+                    # Get or create item
                     cursor.execute('SELECT id FROM items WHERE item_name = ? AND category_id = ?', 
                                  (row['item_name'], category_id))
-                    item_id = cursor.fetchone()[0]
+                    item_result = cursor.fetchone()
+                    
+                    if item_result:
+                        item_id = item_result[0]
+                    else:
+                        # Create custom item - get max display_order for this category
+                        # Custom items should come after all default items
+                        cursor.execute('SELECT MAX(display_order) FROM items WHERE category_id = ?', (category_id,))
+                        max_order = cursor.fetchone()[0]
+                        
+                        # If max_order is None (no items yet), start at 1000 to leave room for defaults
+                        # Otherwise, add after the last item
+                        if max_order is None:
+                            next_order = 1000
+                        else:
+                            next_order = max_order + 1
+                        
+                        cursor.execute('INSERT INTO items (item_name, category_id, display_order) VALUES (?, ?, ?)', 
+                                     (row['item_name'], category_id, next_order))
+                        item_id = cursor.lastrowid
+                        
+                        item_key = f"{row['category_name']} - {row['item_name']}"
+                        if item_key not in new_items_created:
+                            new_items_created.append(item_key)
+                            self.log_text.append(f'  Created custom item: {item_key}')
                     
                     # Check if entry exists
                     cursor.execute('''
@@ -283,6 +303,10 @@ class RestoreTab(QWidget):
                     
                 except Exception as e:
                     self.log_text.append(f'  Error importing row: {str(e)}')
+        
+        # Show summary of new items
+        if new_items_created:
+            self.log_text.append(f'\n  Total custom items created: {len(new_items_created)}')
         
         # Emit signals if new data was created
         if new_pastorates:

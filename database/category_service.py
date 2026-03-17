@@ -121,7 +121,7 @@ class CategoryService:
                 SELECT i.id, i.item_name, i.category_id, c.category_name 
                 FROM items i
                 JOIN categories c ON i.category_id = c.id
-                ORDER BY c.category_name, i.item_name
+                ORDER BY c.category_name, i.display_order, i.item_name
             ''')
             return cursor.fetchall()
     
@@ -134,7 +134,19 @@ class CategoryService:
     def add_item(self, item_name, category_id):
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO items (item_name, category_id) VALUES (?, ?)', (item_name, category_id))
+            # Get max display_order for this category to add at the end
+            cursor.execute('SELECT MAX(display_order) FROM items WHERE category_id = ?', (category_id,))
+            max_order = cursor.fetchone()[0]
+            
+            # If max_order is None (no items yet), start at 1000 to leave room for defaults
+            # Otherwise, add after the last item
+            if max_order is None:
+                next_order = 1000
+            else:
+                next_order = max_order + 1
+            
+            cursor.execute('INSERT INTO items (item_name, category_id, display_order) VALUES (?, ?, ?)', 
+                         (item_name, category_id, next_order))
             return cursor.lastrowid
     
     def update_item(self, item_id, item_name, category_id):
@@ -165,6 +177,22 @@ class CategoryService:
             if cursor.fetchone()[0] > 0:
                 raise ValueError("Cannot delete: Item is used in budget entries")
             cursor.execute('DELETE FROM items WHERE id = ?', (item_id,))
+    
+    def swap_item_order(self, item1_id, item2_id):
+        """Swap display order of two items"""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get display orders
+            cursor.execute('SELECT display_order FROM items WHERE id = ?', (item1_id,))
+            order1 = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT display_order FROM items WHERE id = ?', (item2_id,))
+            order2 = cursor.fetchone()[0]
+            
+            # Swap orders
+            cursor.execute('UPDATE items SET display_order = ? WHERE id = ?', (order2, item1_id))
+            cursor.execute('UPDATE items SET display_order = ? WHERE id = ?', (order1, item2_id))
     
     def save_budget_entry(self, year_id, pastorate_id, data_type_id, category_id, item_id, amount):
         """Save a single budget entry"""
