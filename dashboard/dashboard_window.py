@@ -68,38 +68,41 @@ class DashboardWindow(QWidget):
         
         self.stacked_widget = QStackedWidget()
         
+        # Index 0: Dashboard
         self.dashboard_page = DashboardPage(self.username, self.db)
         self.stacked_widget.addWidget(self.dashboard_page)
         
+        # Index 1: Categories
         self.categories_window = CategoriesWindow(self.db)
         self.categories_window.pastorate_changed.connect(self.on_pastorate_changed)
         self.categories_window.year_changed.connect(self.on_year_changed)
         self.stacked_widget.addWidget(self.categories_window)
         
+        # Index 2: User
         self.user_page = UserPage(self.username, self.db)
         self.user_page.name_updated.connect(self.dashboard_page.update_welcome)
         self.stacked_widget.addWidget(self.user_page)
         
+        # Index 3: Entries
         self.entries_window = EntriesWindow(self.db)
         self.stacked_widget.addWidget(self.entries_window)
         
-        self.tentative_budget_window = TentativeBudgetWindow(self.db)
-        self.stacked_widget.addWidget(self.tentative_budget_window)
-        
-        self.revised_budget_window = RevisedBudgetWindow(self.db)
-        self.stacked_widget.addWidget(self.revised_budget_window)
-        
+        # Index 4: Settings
         self.settings_window = SettingsWindow(self.db)
         self.settings_window.data_imported.connect(self.entries_window.refresh_all_tabs)
         self.settings_window.pastorates_changed.connect(self.categories_window.refresh_pastorates)
         self.settings_window.years_changed.connect(self.categories_window.refresh_years)
-        self.settings_window.pastorates_changed.connect(self.tentative_budget_window.refresh_dropdowns)
-        self.settings_window.years_changed.connect(self.tentative_budget_window.refresh_dropdowns)
         self.stacked_widget.addWidget(self.settings_window)
         
-        self.user_page = UserPage(self.username, self.db)
-        self.user_page.name_updated.connect(self.dashboard_page.update_welcome)
-        self.stacked_widget.addWidget(self.user_page)
+        # Index 5: Tentative Budget
+        self.tentative_budget_window = TentativeBudgetWindow(self.db)
+        self.settings_window.pastorates_changed.connect(self.tentative_budget_window.refresh_dropdowns)
+        self.settings_window.years_changed.connect(self.tentative_budget_window.refresh_dropdowns)
+        self.stacked_widget.addWidget(self.tentative_budget_window)
+        
+        # Index 6: Revised Budget
+        self.revised_budget_window = RevisedBudgetWindow(self.db)
+        self.stacked_widget.addWidget(self.revised_budget_window)
         
         main_layout.addWidget(self.stacked_widget)
         

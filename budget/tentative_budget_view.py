@@ -26,6 +26,10 @@ class TentativeBudgetView(QWidget):
         self.income_items = []
         self.expense_items = []
         
+        # Store opening balance item IDs
+        self.income_opening_item_id = None
+        self.expense_opening_item_id = None
+        
         self.init_ui()
         self.load_budget_data()
     
@@ -274,8 +278,9 @@ class TentativeBudgetView(QWidget):
                 }
             ''')
         
-        table.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed)  # Allow editing
+        table.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed | QTableWidget.AnyKeyPressed)  # Allow editing on any key press
         table.setSelectionMode(QTableWidget.SingleSelection)
+        table.setTabKeyNavigation(False)  # Disable tab navigation, use arrows only
         
         return table
     
@@ -330,11 +335,22 @@ class TentativeBudgetView(QWidget):
         self.income_table.setRowCount(max_rows)
         self.expense_table.setRowCount(max_rows)
         
+        # Block signals during initial setup
+        self.income_table.blockSignals(True)
+        self.expense_table.blockSignals(True)
+        
+        # Recalculate totals excluding opening balance row
+        self.recalculate_totals_excluding_opening()
+        
         # Apply opening balance logic (closing balance from previous year becomes opening balance)
         self.apply_opening_balance_logic()
         
         # Calculate and update closing balance/deficit in sticky summary bar
         self.update_summary_bar()
+        
+        # Re-enable signals
+        self.income_table.blockSignals(False)
+        self.expense_table.blockSignals(False)
     
     def on_cell_changed(self, item):
         """Recalculate totals and opening balances when a cell is edited"""
@@ -345,22 +361,30 @@ class TentativeBudgetView(QWidget):
         if item.column() == 0:
             return
         
-        # Recalculate totals for both tables
-        self.recalculate_totals()
+        # Block signals to prevent infinite loops
+        self.income_table.blockSignals(True)
+        self.expense_table.blockSignals(True)
         
-        # Reapply opening balance logic
+        # Recalculate totals (excluding opening balance row 0)
+        self.recalculate_totals_excluding_opening()
+        
+        # Reapply opening balance logic (this will update row 0 and add to totals)
         self.apply_opening_balance_logic()
         
         # Update summary bar
         self.update_summary_bar()
+        
+        # Re-enable signals
+        self.income_table.blockSignals(False)
+        self.expense_table.blockSignals(False)
     
-    def recalculate_totals(self):
-        """Recalculate totals for all columns"""
+    def recalculate_totals_excluding_opening(self):
+        """Recalculate totals for all columns excluding opening balance row"""
         # Reset totals
         self.income_totals = [0.0, 0.0, 0.0, 0.0]
         self.expense_totals = [0.0, 0.0, 0.0, 0.0]
         
-        # Recalculate income totals (excluding opening balance row 0)
+        # Recalculate income totals (excluding row 0 - opening balance)
         for row_idx in range(1, self.income_table.rowCount()):
             for col_idx in range(1, 5):
                 cell = self.income_table.item(row_idx, col_idx)
@@ -371,7 +395,7 @@ class TentativeBudgetView(QWidget):
                     except ValueError:
                         pass
         
-        # Recalculate expense totals (excluding opening deficit row 0)
+        # Recalculate expense totals (excluding row 0 - opening deficit)
         for row_idx in range(1, self.expense_table.rowCount()):
             for col_idx in range(1, 5):
                 cell = self.expense_table.item(row_idx, col_idx)
@@ -387,13 +411,11 @@ class TentativeBudgetView(QWidget):
         # Column 1 closing → Column 2 & 3 opening
         # Column 3 closing → Column 4 opening
         
-        # First, reset opening balance/deficit cells to their base values (from database)
-        # We need to temporarily disconnect signals to avoid infinite loops
-        self.income_table.blockSignals(True)
-        self.expense_table.blockSignals(True)
+        # Note: Column 1 opening balance comes from database and should not be reset
+        # Only reset columns 2, 3, 4 opening balance cells
         
-        # Reset opening balance cells to 0 (we'll add the carried forward amount)
-        for col_idx in [2, 3, 4]:  # Columns 2, 3, 4
+        # Reset opening balance cells for columns 2, 3, 4 to 0 (we'll add the carried forward amount)
+        for col_idx in [2, 3, 4]:  # Columns 2, 3, 4 only
             income_cell = self.income_table.item(0, col_idx)
             expense_cell = self.expense_table.item(0, col_idx)
             
@@ -453,10 +475,6 @@ class TentativeBudgetView(QWidget):
                 if expense_cell_4:
                     expense_cell_4.setText(f'{abs(col3_diff):,.2f}')
                     self.expense_totals[3] += abs(col3_diff)
-        
-        # Re-enable signals
-        self.income_table.blockSignals(False)
-        self.expense_table.blockSignals(False)
     
     def populate_table(self, table, category_id, year_ids, data_type_ids, 
                       year_minus_2, year_minus_1, category_name):
