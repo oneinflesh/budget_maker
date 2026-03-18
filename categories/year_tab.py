@@ -1,12 +1,14 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                                QTableWidget, QTableWidgetItem, QLineEdit, QMessageBox, QLabel)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from database.category_service import CategoryService
 from config import Config
 
 
 class YearTab(QWidget):
+    year_changed = Signal()  # Signal when years are added/updated/deleted
+    
     def __init__(self, db_manager):
         super().__init__()
         self.db = db_manager
@@ -89,6 +91,7 @@ class YearTab(QWidget):
             self.service.add_year(year)
             self.year_input.clear()
             self.load_data()
+            self.year_changed.emit()  # Emit signal
             QMessageBox.information(self, 'Success', 'Financial year added successfully')
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to add: {str(e)}')
@@ -111,6 +114,7 @@ class YearTab(QWidget):
             self.service.update_year(self.selected_id, year)
             self.clear_selection()
             self.load_data()
+            self.year_changed.emit()  # Emit signal
             QMessageBox.information(self, 'Success', 'Financial year updated successfully')
         except Exception as e:
             QMessageBox.warning(self, 'Error', f'Failed to update: {str(e)}')
@@ -133,6 +137,7 @@ class YearTab(QWidget):
                 self.service.delete_year(year_id)
                 self.clear_selection()
                 self.load_data()
+                self.year_changed.emit()  # Emit signal
                 QMessageBox.information(self, 'Success', 'Financial year deleted successfully')
             except ValueError as e:
                 QMessageBox.warning(self, 'Error', str(e))

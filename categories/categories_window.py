@@ -9,6 +9,7 @@ from categories.item_tab import ItemTab
 
 class CategoriesWindow(QWidget):
     pastorate_changed = Signal()  # Signal when pastorates change
+    year_changed = Signal()  # Signal when years change
     
     def __init__(self, db_manager):
         super().__init__()
@@ -49,6 +50,9 @@ class CategoriesWindow(QWidget):
         
         # Connect pastorate changes signal
         self.pastorate_tab.pastorate_changed.connect(self.pastorate_changed.emit)
+        
+        # Connect year changes signal
+        self.year_tab.year_changed.connect(self.year_changed.emit)
         
         layout.addWidget(tab_widget)
         self.setLayout(layout)

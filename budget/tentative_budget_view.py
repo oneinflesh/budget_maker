@@ -114,6 +114,10 @@ class TentativeBudgetView(QWidget):
             self.income_table.verticalScrollBar().setValue
         )
         
+        # Connect cell changes to recalculate totals and opening balances
+        self.income_table.itemChanged.connect(self.on_cell_changed)
+        self.expense_table.itemChanged.connect(self.on_cell_changed)
+        
         scroll_content.setLayout(scroll_layout)
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
@@ -332,10 +336,71 @@ class TentativeBudgetView(QWidget):
         # Calculate and update closing balance/deficit in sticky summary bar
         self.update_summary_bar()
     
+    def on_cell_changed(self, item):
+        """Recalculate totals and opening balances when a cell is edited"""
+        if not item:
+            return
+        
+        # Only process amount columns (1-4), not item names (0)
+        if item.column() == 0:
+            return
+        
+        # Recalculate totals for both tables
+        self.recalculate_totals()
+        
+        # Reapply opening balance logic
+        self.apply_opening_balance_logic()
+        
+        # Update summary bar
+        self.update_summary_bar()
+    
+    def recalculate_totals(self):
+        """Recalculate totals for all columns"""
+        # Reset totals
+        self.income_totals = [0.0, 0.0, 0.0, 0.0]
+        self.expense_totals = [0.0, 0.0, 0.0, 0.0]
+        
+        # Recalculate income totals (excluding opening balance row 0)
+        for row_idx in range(1, self.income_table.rowCount()):
+            for col_idx in range(1, 5):
+                cell = self.income_table.item(row_idx, col_idx)
+                if cell:
+                    try:
+                        amount = float(cell.text().replace(',', ''))
+                        self.income_totals[col_idx - 1] += amount
+                    except ValueError:
+                        pass
+        
+        # Recalculate expense totals (excluding opening deficit row 0)
+        for row_idx in range(1, self.expense_table.rowCount()):
+            for col_idx in range(1, 5):
+                cell = self.expense_table.item(row_idx, col_idx)
+                if cell:
+                    try:
+                        amount = float(cell.text().replace(',', ''))
+                        self.expense_totals[col_idx - 1] += amount
+                    except ValueError:
+                        pass
+    
     def apply_opening_balance_logic(self):
         """Apply logic: Closing balance from one year becomes opening balance for next year"""
         # Column 1 closing → Column 2 & 3 opening
         # Column 3 closing → Column 4 opening
+        
+        # First, reset opening balance/deficit cells to their base values (from database)
+        # We need to temporarily disconnect signals to avoid infinite loops
+        self.income_table.blockSignals(True)
+        self.expense_table.blockSignals(True)
+        
+        # Reset opening balance cells to 0 (we'll add the carried forward amount)
+        for col_idx in [2, 3, 4]:  # Columns 2, 3, 4
+            income_cell = self.income_table.item(0, col_idx)
+            expense_cell = self.expense_table.item(0, col_idx)
+            
+            if income_cell:
+                income_cell.setText('0.00')
+            if expense_cell:
+                expense_cell.setText('0.00')
         
         # Calculate closing balance for column 1 (Actual year-2)
         col1_diff = self.income_totals[0] - self.expense_totals[0]
@@ -347,17 +412,13 @@ class TentativeBudgetView(QWidget):
                 # Column 2 (R-Budget)
                 income_cell_2 = self.income_table.item(0, 2)
                 if income_cell_2:
-                    current_val = float(income_cell_2.text().replace(',', ''))
-                    new_val = current_val + col1_diff
-                    income_cell_2.setText(f'{new_val:,.2f}')
+                    income_cell_2.setText(f'{col1_diff:,.2f}')
                     self.income_totals[1] += col1_diff
                 
                 # Column 3 (Actual Estimate)
                 income_cell_3 = self.income_table.item(0, 3)
                 if income_cell_3:
-                    current_val = float(income_cell_3.text().replace(',', ''))
-                    new_val = current_val + col1_diff
-                    income_cell_3.setText(f'{new_val:,.2f}')
+                    income_cell_3.setText(f'{col1_diff:,.2f}')
                     self.income_totals[2] += col1_diff
         else:
             # Deficit: Add to Expenses Opening Deficit for columns 2 & 3
@@ -365,17 +426,13 @@ class TentativeBudgetView(QWidget):
                 # Column 2 (R-Budget)
                 expense_cell_2 = self.expense_table.item(0, 2)
                 if expense_cell_2:
-                    current_val = float(expense_cell_2.text().replace(',', ''))
-                    new_val = current_val + abs(col1_diff)
-                    expense_cell_2.setText(f'{new_val:,.2f}')
+                    expense_cell_2.setText(f'{abs(col1_diff):,.2f}')
                     self.expense_totals[1] += abs(col1_diff)
                 
                 # Column 3 (Actual Estimate)
                 expense_cell_3 = self.expense_table.item(0, 3)
                 if expense_cell_3:
-                    current_val = float(expense_cell_3.text().replace(',', ''))
-                    new_val = current_val + abs(col1_diff)
-                    expense_cell_3.setText(f'{new_val:,.2f}')
+                    expense_cell_3.setText(f'{abs(col1_diff):,.2f}')
                     self.expense_totals[2] += abs(col1_diff)
         
         # Calculate closing balance for column 3 (Actual Estimate year-1)
@@ -387,19 +444,19 @@ class TentativeBudgetView(QWidget):
             if self.income_opening_item_id:
                 income_cell_4 = self.income_table.item(0, 4)
                 if income_cell_4:
-                    current_val = float(income_cell_4.text().replace(',', ''))
-                    new_val = current_val + col3_diff
-                    income_cell_4.setText(f'{new_val:,.2f}')
+                    income_cell_4.setText(f'{col3_diff:,.2f}')
                     self.income_totals[3] += col3_diff
         else:
             # Deficit: Add to Expenses Opening Deficit for column 4
             if self.expense_opening_item_id:
                 expense_cell_4 = self.expense_table.item(0, 4)
                 if expense_cell_4:
-                    current_val = float(expense_cell_4.text().replace(',', ''))
-                    new_val = current_val + abs(col3_diff)
-                    expense_cell_4.setText(f'{new_val:,.2f}')
+                    expense_cell_4.setText(f'{abs(col3_diff):,.2f}')
                     self.expense_totals[3] += abs(col3_diff)
+        
+        # Re-enable signals
+        self.income_table.blockSignals(False)
+        self.expense_table.blockSignals(False)
     
     def populate_table(self, table, category_id, year_ids, data_type_ids, 
                       year_minus_2, year_minus_1, category_name):
@@ -430,12 +487,13 @@ class TentativeBudgetView(QWidget):
         totals = [0.0, 0.0, 0.0, 0.0]  # For each column
         
         for row_idx, (item_id, item_name) in enumerate(items):
-            # Item name
+            # Item name - NON-EDITABLE
             item_cell = QTableWidgetItem(item_name)
             if category_name == 'Income':
                 item_cell.setForeground(Qt.darkGreen)
             else:
                 item_cell.setForeground(Qt.darkRed)
+            item_cell.setFlags(item_cell.flags() & ~Qt.ItemIsEditable)  # Make non-editable
             table.setItem(row_idx, 0, item_cell)
             
             # Column 1: Actual (year-2) - EDITABLE

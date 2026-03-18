@@ -100,15 +100,22 @@ class TentativeBudgetWindow(QWidget):
     
     def load_pastorates(self):
         """Load pastorates into combo box"""
+        self.pastorate_combo.clear()
         pastorates = self.service.get_all_pastorates()
         for pastorate_id, pastorate_name in pastorates:
             self.pastorate_combo.addItem(pastorate_name, pastorate_id)
     
     def load_years(self):
         """Load years into combo box"""
+        self.year_combo.clear()
         years = self.service.get_all_years()
         for year_id, year in years:
             self.year_combo.addItem(year, year_id)
+    
+    def refresh_dropdowns(self):
+        """Refresh pastorate and year dropdowns"""
+        self.load_pastorates()
+        self.load_years()
     
     def create_budget_view(self):
         """Create and show the budget view"""

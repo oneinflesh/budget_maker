@@ -73,6 +73,7 @@ class DashboardWindow(QWidget):
         
         self.categories_window = CategoriesWindow(self.db)
         self.categories_window.pastorate_changed.connect(self.on_pastorate_changed)
+        self.categories_window.year_changed.connect(self.on_year_changed)
         self.stacked_widget.addWidget(self.categories_window)
         
         self.user_page = UserPage(self.username, self.db)
@@ -82,17 +83,19 @@ class DashboardWindow(QWidget):
         self.entries_window = EntriesWindow(self.db)
         self.stacked_widget.addWidget(self.entries_window)
         
-        self.settings_window = SettingsWindow(self.db)
-        self.settings_window.data_imported.connect(self.entries_window.refresh_all_tabs)
-        self.settings_window.pastorates_changed.connect(self.categories_window.refresh_pastorates)
-        self.settings_window.years_changed.connect(self.categories_window.refresh_years)
-        self.stacked_widget.addWidget(self.settings_window)
-        
         self.tentative_budget_window = TentativeBudgetWindow(self.db)
         self.stacked_widget.addWidget(self.tentative_budget_window)
         
         self.revised_budget_window = RevisedBudgetWindow(self.db)
         self.stacked_widget.addWidget(self.revised_budget_window)
+        
+        self.settings_window = SettingsWindow(self.db)
+        self.settings_window.data_imported.connect(self.entries_window.refresh_all_tabs)
+        self.settings_window.pastorates_changed.connect(self.categories_window.refresh_pastorates)
+        self.settings_window.years_changed.connect(self.categories_window.refresh_years)
+        self.settings_window.pastorates_changed.connect(self.tentative_budget_window.refresh_dropdowns)
+        self.settings_window.years_changed.connect(self.tentative_budget_window.refresh_dropdowns)
+        self.stacked_widget.addWidget(self.settings_window)
         
         self.user_page = UserPage(self.username, self.db)
         self.user_page.name_updated.connect(self.dashboard_page.update_welcome)
@@ -109,8 +112,13 @@ class DashboardWindow(QWidget):
         self.setLayout(main_layout)
     
     def on_pastorate_changed(self):
-        """Handle pastorate changes - refresh backup dropdown"""
+        """Handle pastorate changes - refresh backup dropdown and tentative budget"""
         self.settings_window.refresh_backup_pastorates()
+        self.tentative_budget_window.refresh_dropdowns()
+    
+    def on_year_changed(self):
+        """Handle year changes - refresh tentative budget"""
+        self.tentative_budget_window.refresh_dropdowns()
     
     def handle_logout(self):
         self.db.clear_session()
