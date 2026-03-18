@@ -1,9 +1,23 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QScrollArea, QTableWidget, QTableWidgetItem, QMessageBox, QPushButton)
+                               QScrollArea, QTableWidget, QTableWidgetItem, QMessageBox, QPushButton, QStyledItemDelegate)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from database.category_service import CategoryService
 from config import Config
+
+
+class ArrowKeyDelegate(QStyledItemDelegate):
+    """Custom delegate to commit edits on arrow key press"""
+    
+    def eventFilter(self, editor, event):
+        if event.type() == event.Type.KeyPress:
+            key = event.key()
+            if key in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+                # Commit the edit
+                self.commitData.emit(editor)
+                self.closeEditor.emit(editor)
+                return False  # Let the table handle navigation
+        return super().eventFilter(editor, event)
 
 
 class TentativeBudgetView(QWidget):
@@ -282,6 +296,10 @@ class TentativeBudgetView(QWidget):
         table.setSelectionMode(QTableWidget.SingleSelection)
         table.setTabKeyNavigation(False)  # Disable tab navigation, use arrows only
         
+        # Set custom delegate for arrow key handling
+        delegate = ArrowKeyDelegate(table)
+        table.setItemDelegate(delegate)
+        
         return table
     
     def load_budget_data(self):
@@ -384,25 +402,32 @@ class TentativeBudgetView(QWidget):
         self.income_totals = [0.0, 0.0, 0.0, 0.0]
         self.expense_totals = [0.0, 0.0, 0.0, 0.0]
         
-        # Recalculate income totals (excluding row 0 - opening balance)
-        for row_idx in range(1, self.income_table.rowCount()):
+        # For column 1: Include opening balance (row 0) since it comes from database
+        # For columns 2, 3, 4: Exclude opening balance (row 0) since it will be auto-calculated
+        
+        for row_idx in range(self.income_table.rowCount()):
             for col_idx in range(1, 5):
                 cell = self.income_table.item(row_idx, col_idx)
                 if cell:
                     try:
                         amount = float(cell.text().replace(',', ''))
-                        self.income_totals[col_idx - 1] += amount
+                        # For column 1, include all rows including row 0
+                        # For columns 2-4, exclude row 0
+                        if col_idx == 1 or row_idx > 0:
+                            self.income_totals[col_idx - 1] += amount
                     except ValueError:
                         pass
         
-        # Recalculate expense totals (excluding row 0 - opening deficit)
-        for row_idx in range(1, self.expense_table.rowCount()):
+        for row_idx in range(self.expense_table.rowCount()):
             for col_idx in range(1, 5):
                 cell = self.expense_table.item(row_idx, col_idx)
                 if cell:
                     try:
                         amount = float(cell.text().replace(',', ''))
-                        self.expense_totals[col_idx - 1] += amount
+                        # For column 1, include all rows including row 0
+                        # For columns 2-4, exclude row 0
+                        if col_idx == 1 or row_idx > 0:
+                            self.expense_totals[col_idx - 1] += amount
                     except ValueError:
                         pass
     
